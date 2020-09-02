@@ -1,19 +1,18 @@
-[![CircleCI](https://circleci.com/gh/poanetwork/eth-to-bnc-bridge/tree/master.svg?style=svg)](https://circleci.com/gh/poanetwork/eth-to-bnc-bridge/tree/master)
+## Harmony to Binance Chain bridge
 
-## Ethereum to Binance Chain bridge
+This repository contains a proof-of-concept for HRC20-to-BEP2 bridge. The project itself is forked from [eth-to-bnc-bridge](https://github.com/poanetwork/eth-to-bnc-bridge) and adopted to Harmony chain.
 
-This repository contains a proof-of-concept for ERC20-to-BEP2 bridge.
-
+The original thread discussing the bridge proposal can be found: 
 https://forum.poa.network/t/ethereum-to-binance-chain-bridge/2696
 
-The bridge is able to transfer an ERC20 tokens on an EVM-based chain to BEP2 to the Binance Chain and vice versa.
+The bridge is able to transfer an HRC20 tokens on harmony chain to BEP2 to the Binance Chain and vice versa.
 
 It includes the following components:
-1. The bridge contract on an EVM-based chain that is responsible to receive and release ERC20 tokens 
-2. The orchestration contract on an EVM-based chain that participate in MPC (multy-party computations) to generate a threshold signature.
+1. The bridge contract on harmony chain that is responsible to receive and release HRC20 tokens 
+2. The orchestration contract on harmony chain that participate in MPC (multy-party computations) to generate a threshold signature.
 3. The oracle that monitors the chains and the send transactions. One oracle represents one bridge validator (one private key).
 
-The idea of the bridge is similar to [the token bridge](https://github.com/poanetwork/tokenbridge) produced by [POA.Network](https://poa.network/):
+The idea of the bridge is similar to [eth-to-bnc-bridge](https://github.com/poanetwork/eth-to-bnc-bridge) produced by [POA.Network](https://poa.network/):
 - every oracle sends its confirmation as soon as a user sends the token relay request in one chain.
 - when enough confirmations collected the requested amount of tokens is unlocked in another chain.
 
