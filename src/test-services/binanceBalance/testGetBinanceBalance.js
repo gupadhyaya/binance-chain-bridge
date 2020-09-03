@@ -9,7 +9,8 @@ function main() {
   httpClient
     .get(`/api/v1/account/${address}`)
     .then((res) => {
-      console.log(`BNB: ${parseFloat(res.data.balances.find((token) => token.symbol === 'BNB').free)}`)
+      // console.log(res.data.balances);
+      // console.log(`BNB: ${parseFloat(res.data.balances.find((token) => token.symbol === 'BNB').free)}`)
       console.log(`${FOREIGN_ASSET}: ${parseFloat(res.data.balances.find((token) => token.symbol === FOREIGN_ASSET).free)}`)
     })
     .catch(console.log)

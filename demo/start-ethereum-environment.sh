@@ -84,10 +84,10 @@ deploy_db() {
 
 deploy_all() {
   TOKEN_ADDRESS=$(source "$DEPLOY_DIR/deploy-home/.env.$TARGET_NETWORK"; echo "$HOME_TOKEN_ADDRESS")
-
+  
   if [[ "$TARGET_NETWORK" == "development" ]] || [[ "$TOKEN_ADDRESS" == "0x" ]]; then
     deploy_token
-    sed -i 's/TOKEN_ADDRESS=0x$/TOKEN_ADDRESS='"$TOKEN_ADDRESS"'/' "$DEPLOY_DIR/deploy-home/.env.$TARGET_NETWORK"
+    sed -i '' 's/TOKEN_ADDRESS=0x$/TOKEN_ADDRESS='"$TOKEN_ADDRESS"'/' "$DEPLOY_DIR/deploy-home/.env.$TARGET_NETWORK"
   fi
 
   deploy_bridge
@@ -99,15 +99,15 @@ deploy_all() {
 
   echo "Updating deployed contract addresses in demo validators .env.$TARGET_NETWORK configs"
   for file in "$DEMO_DIR"/validator*/.env."$TARGET_NETWORK"; do
-    sed -i 's/HOME_TOKEN_ADDRESS=.*$/HOME_TOKEN_ADDRESS='"$TOKEN_ADDRESS"'/' "$file"
-    sed -i 's/HOME_BRIDGE_ADDRESS=.*$/HOME_BRIDGE_ADDRESS='"$BRIDGE_ADDRESS"'/' "$file"
-    sed -i 's/SIDE_SHARED_DB_ADDRESS=.*$/SIDE_SHARED_DB_ADDRESS='"$SHARED_DB_ADDRESS"'/' "$file"
+    sed -i '' 's/HOME_TOKEN_ADDRESS=.*$/HOME_TOKEN_ADDRESS='"$TOKEN_ADDRESS"'/' "$file"
+    sed -i '' 's/HOME_BRIDGE_ADDRESS=.*$/HOME_BRIDGE_ADDRESS='"$BRIDGE_ADDRESS"'/' "$file"
+    sed -i '' 's/SIDE_SHARED_DB_ADDRESS=.*$/SIDE_SHARED_DB_ADDRESS='"$SHARED_DB_ADDRESS"'/' "$file"
   done
 
   echo "Updating deployed contract addresses in test-services .env.$TARGET_NETWORK configs"
-  sed -i 's/HOME_TOKEN_ADDRESS=.*$/HOME_TOKEN_ADDRESS='"$TOKEN_ADDRESS"'/' "$TEST_SERVICES_DIR/ethereumBalance/.env.$TARGET_NETWORK"
-  sed -i 's/HOME_BRIDGE_ADDRESS=.*$/HOME_BRIDGE_ADDRESS='"$BRIDGE_ADDRESS"'/' "$TEST_SERVICES_DIR/ethereumSend/.env.$TARGET_NETWORK"
-  sed -i 's/HOME_TOKEN_ADDRESS=.*$/HOME_TOKEN_ADDRESS='"$TOKEN_ADDRESS"'/' "$TEST_SERVICES_DIR/ethereumSend/.env.$TARGET_NETWORK"
+  sed -i '' 's/HOME_TOKEN_ADDRESS=.*$/HOME_TOKEN_ADDRESS='"$TOKEN_ADDRESS"'/' "$TEST_SERVICES_DIR/ethereumBalance/.env.$TARGET_NETWORK"
+  sed -i '' 's/HOME_BRIDGE_ADDRESS=.*$/HOME_BRIDGE_ADDRESS='"$BRIDGE_ADDRESS"'/' "$TEST_SERVICES_DIR/ethereumSend/.env.$TARGET_NETWORK"
+  sed -i '' 's/HOME_TOKEN_ADDRESS=.*$/HOME_TOKEN_ADDRESS='"$TOKEN_ADDRESS"'/' "$TEST_SERVICES_DIR/ethereumSend/.env.$TARGET_NETWORK"
 }
 
 if [[ "$TARGET_NETWORK" == "development" ]]; then
