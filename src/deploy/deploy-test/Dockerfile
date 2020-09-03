@@ -5,8 +5,6 @@ WORKDIR /build
 RUN apk add git python build-base
 
 RUN npm install -g truffle
-RUN npm install @harmony-js/core
-RUN npm install tslib
 
 RUN truffle obtain --solc 0.5.9
 
@@ -30,4 +28,9 @@ RUN truffle compile
 COPY truffle-config.js /build/truffle-config.js
 COPY migrations /build/migrations
 
-ENTRYPOINT ["truffle", "deploy"]
+COPY deploy.js /build
+
+RUN npm install @harmony-js/core
+RUN npm install tslib
+
+ENTRYPOINT ["node", "deploy.js"]
