@@ -1,6 +1,7 @@
 const { utils } = require('ethers')
 const bech32 = require('bech32')
 const crypto = require('crypto')
+const { getAddress } = require('@harmony-js/crypto')
 
 function sha256(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex')
@@ -22,8 +23,9 @@ function main() {
 
   const ethAddress = utils.computeAddress(privateKey)
   const publicKey = utils.computePublicKey(privateKey, true)
+  const oneAddress = getAddress(ethAddress).bech32
 
-  console.log(`Eth address: ${ethAddress}\nBnc address: ${publicKeyToAddress(publicKey)}`)
+  console.log(`Eth address: ${ethAddress}\nBnc address: ${publicKeyToAddress(publicKey)}\nOne address: ${oneAddress}`)
 }
 
 main()

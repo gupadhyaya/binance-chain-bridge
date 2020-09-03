@@ -5,7 +5,8 @@ WORKDIR /build
 RUN apk add git python build-base
 
 RUN npm install -g truffle
-RUN npm install truffle-hdwallet-provider
+RUN npm install @harmony-js/core
+RUN npm install tslib
 
 RUN truffle obtain --solc 0.5.9
 
