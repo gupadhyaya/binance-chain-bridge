@@ -8,6 +8,6 @@ RUN apk add git python build-base
 
 RUN npm install
 
-COPY testEthereumSend.js /test/
+COPY testHarmonySend.js /test/
 
-ENTRYPOINT ["node", "testEthereumSend.js"]
+ENTRYPOINT ["node", "testHarmonySend.js"]
