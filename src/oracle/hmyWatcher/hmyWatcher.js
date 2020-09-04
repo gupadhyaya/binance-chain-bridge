@@ -1,4 +1,3 @@
-const ethers = require('ethers')
 const BN = require('bignumber.js')
 const axios = require('axios')
 
@@ -8,30 +7,274 @@ const { connectRabbit, assertQueue } = require('./amqp')
 const { publicKeyToAddress } = require('./crypto')
 const { delay, retry } = require('./wait')
 
+const { Harmony } = require("@harmony-js/core");
+const { ChainType, numberToHex, hexToNumber } = require("@harmony-js/utils");
+const { recoverPublicKey, keccak256 } = require("@harmony-js/crypto")
+
 const {
-  HOME_RPC_URL, HOME_BRIDGE_ADDRESS, RABBITMQ_URL, HOME_START_BLOCK, VALIDATOR_PRIVATE_KEY
-} = process.env
+  HOME_RPC_URL,
+  HOME_WS_URL,
+  HOME_BRIDGE_ADDRESS,
+  RABBITMQ_URL,
+  HOME_START_BLOCK,
+  VALIDATOR_PRIVATE_KEY,
+  CHAIN_ID,
+  GAS_LIMIT,
+  GAS_PRICE,
+} = process.env;
 const HOME_MAX_FETCH_RANGE_SIZE = parseInt(process.env.HOME_MAX_FETCH_RANGE_SIZE, 10)
 
-const provider = new ethers.providers.JsonRpcProvider(HOME_RPC_URL)
+const hmy = new Harmony(HOME_RPC_URL, {
+  chainType: ChainType.Harmony,
+  chainId: parseInt(CHAIN_ID),
+})
+const hmy_ws = new Harmony(HOME_WS_URL, {
+  chainType: ChainType.Harmony,
+  chainId: parseInt(CHAIN_ID),
+})
+hmy.wallet.addByPrivateKey(VALIDATOR_PRIVATE_KEY);
+
+let options = {
+  gasPrice: GAS_PRICE,
+  gasLimit: GAS_LIMIT,
+}
+
 const bridgeAbi = [
-  'event ExchangeRequest(uint96 value, uint32 nonce)',
-  'event EpochEnd(uint16 indexed epoch)',
-  'event NewEpoch(uint16 indexed oldEpoch, uint16 indexed newEpoch)',
-  'event NewEpochCancelled(uint16 indexed epoch)',
-  'event NewFundsTransfer(uint16 indexed oldEpoch, uint16 indexed newEpoch)',
-  'event EpochStart(uint16 indexed epoch, uint256 x, uint256 y)',
-  'event EpochClose(uint16 indexed epoch)',
-  'event ForceSign()',
-  'function getX(uint16 epoch) view returns (uint256)',
-  'function getY(uint16 epoch) view returns (uint256)',
-  'function getThreshold(uint16 epoch) view returns (uint16)',
-  'function getParties(uint16 epoch) view returns (uint16)',
-  'function getRangeSize(uint16 epoch) view returns (uint16)',
-  'function getValidators(uint16 epoch) view returns (address[])'
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "_epoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "getParties",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "_epoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "getRangeSize",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "_epoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "getY",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "_epoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "getX",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "_epoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "getThreshold",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "_epoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "getValidators",
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "name": "value",
+        "type": "uint96"
+      },
+      {
+        "indexed": false,
+        "name": "nonce",
+        "type": "uint32"
+      }
+    ],
+    "name": "ExchangeRequest",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "epoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "EpochEnd",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "epoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "EpochClose",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [],
+    "name": "ForceSign",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "oldEpoch",
+        "type": "uint16"
+      },
+      {
+        "indexed": true,
+        "name": "newEpoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "NewEpoch",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "epoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "NewEpochCancelled",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "oldEpoch",
+        "type": "uint16"
+      },
+      {
+        "indexed": true,
+        "name": "newEpoch",
+        "type": "uint16"
+      }
+    ],
+    "name": "NewFundsTransfer",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "name": "epoch",
+        "type": "uint16"
+      },
+      {
+        "indexed": false,
+        "name": "x",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "name": "y",
+        "type": "uint256"
+      }
+    ],
+    "name": "EpochStart",
+    "type": "event"
+  }
 ]
-const bridge = new ethers.Contract(HOME_BRIDGE_ADDRESS, bridgeAbi, provider)
-const validatorAddress = ethers.utils.computeAddress(`0x${VALIDATOR_PRIVATE_KEY}`)
+
+const bridgeContract = hmy.contracts.createContract(bridgeAbi, HOME_BRIDGE_ADDRESS);
+const bridgeContractWS = hmy_ws.contracts.createContract(bridgeAbi, HOME_BRIDGE_ADDRESS);
+const validatorAddress = bridgeContract.wallet.signer.address;
+const bridge = bridgeContract.methods;
 
 const foreignNonce = []
 let channel
@@ -51,7 +294,9 @@ let isCurrentValidator
 let activeEpoch
 
 async function getBlockTimestamp(n) {
-  return (await provider.getBlock(n, false)).timestamp
+  return hexToNumber((await hmy.blockchain.getBlockByNumber({
+    blockNumber: numberToHex(n)
+  })).result.timestamp)
 }
 
 async function resetFutureMessages(queue) {
@@ -95,8 +340,8 @@ async function resetFutureMessages(queue) {
 async function sendKeygen(event) {
   const { newEpoch } = event.values
   const [threshold, parties] = await Promise.all([
-    bridge.getThreshold(newEpoch),
-    bridge.getParties(newEpoch)
+    bridge.getThreshold(newEpoch).call(options),
+    bridge.getParties(newEpoch).call(options)
   ])
   keygenQueue.send({
     epoch: newEpoch,
@@ -121,10 +366,10 @@ async function sendSignFundsTransfer(event) {
   const [
     x, y, threshold, parties
   ] = await Promise.all([
-    bridge.getX(newEpoch).then((value) => new BN(value).toString(16)),
-    bridge.getY(newEpoch).then((value) => new BN(value).toString(16)),
-    bridge.getThreshold(oldEpoch),
-    bridge.getParties(oldEpoch)
+    bridge.getX(newEpoch).call(options).then((value) => new BN(value).toString(16)),
+    bridge.getY(newEpoch).call(options).then((value) => new BN(value).toString(16)),
+    bridge.getThreshold(oldEpoch).call(options),
+    bridge.getParties(oldEpoch).call(options)
   ])
   const recipient = publicKeyToAddress({
     x,
@@ -145,17 +390,20 @@ async function sendSignFundsTransfer(event) {
 }
 
 async function sendSign(event, transactionHash) {
-  const tx = await provider.getTransaction(transactionHash)
-  const msg = ethers.utils.serializeTransaction({
+  const tx = (await hmy.blockchain.getTransactionByHash({
+    txnHash: transactionHash,
+  })).result;
+  const txn = hmy.transactions.newTx({
     nonce: tx.nonce,
     gasPrice: tx.gasPrice,
     gasLimit: tx.gasLimit,
     to: tx.to,
     data: tx.data,
     chainId
-  })
-  const hash = ethers.utils.keccak256(msg)
-  const publicKey = ethers.utils.recoverPublicKey(hash, {
+  });
+  const [msg, raw] = txn.getRLPUnsigned()
+  const hash = keccak256(msg)
+  const publicKey = recoverPublicKey(hash, {
     r: tx.r,
     s: tx.s,
     v: tx.v
@@ -181,8 +429,8 @@ async function sendSign(event, transactionHash) {
 
 async function sendStartSign() {
   const [threshold, parties] = await Promise.all([
-    bridge.getThreshold(epoch),
-    bridge.getParties(epoch)
+    bridge.getThreshold(epoch).call(options),
+    bridge.getParties(epoch).call(options)
   ])
   signQueue.send({
     epoch,
@@ -199,8 +447,8 @@ async function processEpochStart(event) {
   epoch = event.values.epoch
   epochStart = blockNumber
   logger.info(`Epoch ${epoch} started`)
-  rangeSize = await bridge.getRangeSize(epoch)
-  isCurrentValidator = (await bridge.getValidators(epoch)).includes(validatorAddress)
+  rangeSize = await bridge.getRangeSize(epoch).call(options)
+  isCurrentValidator = (await bridge.getValidators(epoch).call(options)).includes(validatorAddress)
   if (isCurrentValidator) {
     logger.info(`${validatorAddress} is a current validator`)
   } else {
@@ -213,8 +461,8 @@ async function processEpochStart(event) {
 async function sendEpochClose() {
   logger.debug(`Consumed epoch ${epoch} close event`)
   const [threshold, parties] = await Promise.all([
-    bridge.getThreshold(epoch),
-    bridge.getParties(epoch)
+    bridge.getThreshold(epoch).call(options),
+    bridge.getParties(epoch).call(options)
   ])
   signQueue.send({
     closeEpoch: epoch,
@@ -239,12 +487,12 @@ async function initialize() {
 
   chainId = (await provider.getNetwork()).chainId
 
-  const events = (await provider.getLogs({
+  const events = (await hmy.messenger.send("hmy_getLogs", [{
     address: HOME_BRIDGE_ADDRESS,
     fromBlock: 1,
     toBlock: 'latest',
-    topics: bridge.filters.EpochStart().topics
-  })).map((log) => bridge.interface.parseLog(log))
+    topics: bridgeContractWS.events.EpochStart().options.topics//bridge.filters.EpochStart().topics
+  }])).result.map((log) => parseLog(log))
 
   epoch = events.length ? events[events.length - 1].values.epoch : 0
   logger.info(`Current epoch ${epoch}`)
@@ -263,10 +511,10 @@ async function initialize() {
     blockNumber = saved
     foreignNonce[epoch] = parseInt(await redis.get(`foreignNonce${epoch}`), 10) || 0
   }
-  rangeSize = await bridge.getRangeSize(epoch)
+  rangeSize = await bridge.getRangeSize(epoch).call(options)
   logger.debug(`Range size ${rangeSize}`)
   logger.debug('Checking if current validator')
-  isCurrentValidator = (await bridge.getValidators(epoch)).includes(validatorAddress)
+  isCurrentValidator = (await bridge.getValidators(epoch).call(options)).includes(validatorAddress)
   if (isCurrentValidator) {
     logger.info(`${validatorAddress} is a current validator`)
   } else {
@@ -283,8 +531,24 @@ async function initialize() {
   await axios.get('http://signer:8001/start')
 }
 
+function parseLog(ev) {
+  let fragment = bridgeContract.abiModel.getEvent(ev.topics[0]);
+  if (!fragment || fragment.anonymous) {
+    return null;
+  }
+  let log = contract.abiCoder.decodeLog(
+    fragment.inputs,
+    ev.data,
+    ev.topics.slice(1)
+  );
+  return {
+    name: fragment.name,
+    values: log,
+  };
+}
+
 async function loop() {
-  const latestBlockNumber = await provider.getBlockNumber()
+  const latestBlockNumber = hexToNumber((await hmy.blockchain.getBlockNumber()).result)
   if (latestBlockNumber < blockNumber) {
     logger.debug(`No block after ${latestBlockNumber}`)
     await delay(2000)
@@ -297,28 +561,28 @@ async function loop() {
 
   logger.debug(`Watching events in blocks #${blockNumber}-${endBlock}`)
 
-  const bridgeEvents = (await provider.getLogs({
+  const bridgeEvents = (await hmy.messenger.send("hmy_getLogs", [{
     address: HOME_BRIDGE_ADDRESS,
     fromBlock: blockNumber,
     toBlock: endBlock,
     topics: []
-  }))
+  }])).result
 
   for (let curBlockNumber = blockNumber, i = 0; curBlockNumber <= endBlock; curBlockNumber += 1) {
     const rangeOffset = (curBlockNumber + 1 - epochStart) % rangeSize
     const rangeStart = curBlockNumber - (rangeOffset || rangeSize)
     let epochTimeUpdated = false
     while (i < bridgeEvents.length && bridgeEvents[i].blockNumber === curBlockNumber) {
-      const event = bridge.interface.parseLog(bridgeEvents[i])
+      const event = parseLog(bridgeEvents[i])
       logger.trace('Consumed event %o %o', event, bridgeEvents[i])
       switch (event.name) {
         case 'NewEpoch':
-          if ((await bridge.getValidators(event.values.newEpoch)).includes(validatorAddress)) {
+          if ((await bridge.getValidators(event.values.newEpoch).call(options)).includes(validatorAddress)) {
             await sendKeygen(event)
           }
           break
         case 'NewEpochCancelled':
-          if ((await bridge.getValidators(event.values.epoch)).includes(validatorAddress)) {
+          if ((await bridge.getValidators(event.values.epoch).call(options)).includes(validatorAddress)) {
             sendKeygenCancellation(event)
           }
           break
@@ -405,3 +669,82 @@ async function main() {
 }
 
 main()
+
+// (async function () {
+//   // const latestBlockNumber = hexToNumber(
+//   //   (await hmy.blockchain.getBlockNumber()).result
+//   // );
+//   // console.log(latestBlockNumber);
+//   // console.log(await getBlockTimestamp(latestBlockNumber));
+
+//   // console.log(bridge);
+//   // let res = await bridge.getValidators(0).call(options);
+//   // console.log(res);
+
+//   // const hmy_ws = new Harmony("wss://ws.s0.b.hmny.io", {
+//   //   chainType: ChainType.Harmony,
+//   //   chainId: parseInt(CHAIN_ID),
+//   // });
+//   // hmy_ws.blockchain
+//   //   .logs({
+//   //     address: "0x7C72f67D7a062f3ddce0224C47b9b3f35A80135f",
+//   //     fromBlock: "0x139E1E",
+//   //     endBlock: "0x139E20"
+//   //   })
+//   //   .on("data", (event) => {
+//   //     console.log(event);
+//   //   });
+
+//   // const logs = (await hmy.messenger.send("hmy_getLogs", [
+//   //   {
+//   //     fromBlock: "0x13BE7B",
+//   //     // toBlock: "latest",
+//   //     address: "0x7C72f67D7a062f3ddce0224C47b9b3f35A80135f",
+//   //   },
+//   // ])).result;
+//   // console.log(logs);
+
+//   // let fragment = contract.abiModel.getEvent(ev.topics[0]);
+//   // if (!fragment || fragment.anonymous) {
+//   //   return null;
+//   // }
+//   // let log = contract.abiCoder.decodeLog(
+//   //   fragment.inputs,
+//   //   ev.data,
+//   //   ev.topics.slice(1)
+//   // );
+//   // let event = {
+//   //   name: fragment.name,
+//   //   values: log,
+//   // };
+
+//   // const hmy_ws = new Harmony("wss://ws.s0.b.hmny.io", {
+//   //   chainType: ChainType.Harmony,
+//   //   chainId: ChainID.HmyTestnet
+//   // });
+//   // const contract = hmy_ws.contracts.createContract(contractJson.abi, contractAddr, options);
+//   // console.log(contract.events.IncrementedBy().options);
+
+//   // const tx = (await hmy.blockchain.getTransactionByHash({
+//   //   txnHash: '0xd5f05b34727c0383020b454522d896016b67af9f2dec01c9397423ad22c5659f',
+//   // })).result;
+//   // console.log(tx);
+//   // const txn = hmy.transactions.newTx({
+//   //   nonce: tx.nonce,
+//   //   gasPrice: tx.gasPrice,
+//   //   gasLimit: tx.gasLimit,
+//   //   to: tx.to,
+//   //   data: tx.data,
+//   //   chainId
+//   // });
+//   // const [msg, raw] = txn.getRLPUnsigned()
+//   // console.log(msg);
+//   // const hash = ethers.utils.keccak256(msg)
+//   // const publicKey = recoverPublicKey(hash, {
+//   //   r: tx.r,
+//   //   s: tx.s,
+//   //   v: tx.v
+//   // })
+//   // console.log(publicKey);
+
+// })();

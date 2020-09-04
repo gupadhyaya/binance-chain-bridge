@@ -1,34 +1,433 @@
 const tokenAbi = [
-  'function balanceOf(address account) view returns (uint256)'
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "balanceOf",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  }
 ]
 const bridgeAbi = [
-  'function getX() view returns (uint256)',
-  'function getY() view returns (uint256)',
-  'function epoch() view returns (uint16)',
-  'function getRangeSize() view returns (uint16)',
-  'function getNextRangeSize() view returns (uint16)',
-  'function getStartBlock() view returns (uint32)',
-  'function getNonce() view returns (uint16)',
-  'function nextEpoch() view returns (uint16)',
-  'function getThreshold() view returns (uint16)',
-  'function getNextThreshold() view returns (uint16)',
-  'function getValidators() view returns (address[])',
-  'function getNextValidators() view returns (address[])',
-  'function getCloseEpoch() view returns (bool)',
-  'function getNextCloseEpoch() view returns (bool)',
-  'function status() view returns (uint8)',
-  'function votesCount(bytes32) view returns (uint16)',
-  'function getNextPartyId(address a) view returns (uint16)'
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getX",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getY",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "epoch",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getRangeSize",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getNextRangeSize",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getStartBlock",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getNonce",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "nextEpoch",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getThreshold",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getNextThreshold",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getValidators",
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getNextValidators",
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[]"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getCloseEpoch",
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "getNextCloseEpoch",
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [],
+    "name": "status",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "a",
+        "type": "address"
+      }
+    ],
+    "name": "getNextPartyId",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  }
 ]
 const sharedDbAbi = [
-  'function getSignupAddress(bytes32 hash, address[] validators, uint16 signupNumber) view returns (address)',
-  'function getData(address from, bytes32 hash, bytes32 key) view returns (bytes)',
-  'function getSignupNumber(bytes32 hash, address[] validators, address validator) view returns (uint16)',
-  'function isSignuped(bytes32 hash) view returns (bool)',
-  'function setData(bytes32 hash, bytes32 key, bytes data)',
-  'function signup(bytes32 hash)',
-  'function addSignature(bytes message, bytes rsv)',
-  'function getSignatures(bytes32 msgHash, address[] validators) view returns (bytes)'
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "hash",
+        "type": "bytes32"
+      },
+      {
+        "name": "validators",
+        "type": "address[]"
+      },
+      {
+        "name": "signupNumber",
+        "type": "uint16"
+      }
+    ],
+    "name": "getSignupAddress",
+    "outputs": [
+      {
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "from",
+        "type": "address"
+      },
+      {
+        "name": "id",
+        "type": "bytes32"
+      },
+      {
+        "name": "key",
+        "type": "bytes32"
+      }
+    ],
+    "name": "getData",
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "hash",
+        "type": "bytes32"
+      },
+      {
+        "name": "validators",
+        "type": "address[]"
+      },
+      {
+        "name": "validator",
+        "type": "address"
+      }
+    ],
+    "name": "getSignupNumber",
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "hash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "isSignuped",
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "name": "id",
+        "type": "bytes32"
+      },
+      {
+        "name": "key",
+        "type": "bytes32"
+      },
+      {
+        "name": "data",
+        "type": "bytes"
+      }
+    ],
+    "name": "setData",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "name": "hash",
+        "type": "bytes32"
+      }
+    ],
+    "name": "signup",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": false,
+    "inputs": [
+      {
+        "name": "message",
+        "type": "bytes"
+      },
+      {
+        "name": "rsv",
+        "type": "bytes"
+      }
+    ],
+    "name": "addSignature",
+    "outputs": [],
+    "payable": false,
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "constant": true,
+    "inputs": [
+      {
+        "name": "msgHash",
+        "type": "bytes32"
+      },
+      {
+        "name": "validators",
+        "type": "address[]"
+      }
+    ],
+    "name": "getSignatures",
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes"
+      }
+    ],
+    "payable": false,
+    "stateMutability": "view",
+    "type": "function"
+  }
 ]
 
 module.exports = {

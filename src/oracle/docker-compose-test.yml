@@ -7,14 +7,18 @@ services:
       context: .
     environment:
       - HOME_RPC_URL
+      - HOME_WS_URL
       - HOME_BRIDGE_ADDRESS
       - HOME_TOKEN_ADDRESS
       - SIDE_RPC_URL
+      - CHAIN_ID
       - SIDE_SHARED_DB_ADDRESS
       - VALIDATOR_PRIVATE_KEY
       - FOREIGN_URL
       - FOREIGN_ASSET
       - LOG_LEVEL
+      - GAS_LIMIT
+      - GAS_PRICE
       - 'GAS_LIMIT_FACTOR=3'
       - 'MAX_GAS_LIMIT=6000000'
     ports:
@@ -23,8 +27,8 @@ services:
       test_network:
         aliases:
           - local_proxy
-      ethereum_home_rpc_net:
-      ethereum_side_rpc_net:
+      harmony_home_rpc_net:
+      harmony_side_rpc_net:
       binance_net:
   keygen:
     image: keygen-client
@@ -83,13 +87,14 @@ services:
       - '${PWD}/${TARGET_NETWORK}/queue:/var/lib/rabbitmq/mnesia'
     networks:
       - test_network
-  eth-watcher:
+  hmy-watcher:
     build:
-      dockerfile: ethWatcher/Dockerfile
+      dockerfile: hmyWatcher/Dockerfile
       context: .
-    image: eth-watcher
+    image: hmy-watcher
     environment:
       - HOME_RPC_URL
+      - HOME_WS_URL
       - HOME_BRIDGE_ADDRESS
       - HOME_TOKEN_ADDRESS
       - HOME_START_BLOCK
@@ -98,9 +103,12 @@ services:
       - HOME_MAX_FETCH_RANGE_SIZE
       - 'RABBITMQ_URL=amqp://rabbitmq:5672'
       - LOG_LEVEL
+      - GAS_LIMIT
+      - GAS_PRICE
+      - CHAIN_ID
     networks:
       - test_network
-      - ethereum_home_rpc_net
+      - harmony_home_rpc_net
   bnc-watcher:
     build:
       dockerfile: bncWatcher/Dockerfile
@@ -122,9 +130,9 @@ services:
       - binance_net
 networks:
   test_network:
-  ethereum_side_rpc_net:
+  harmony_side_rpc_net:
     external: true
-  ethereum_home_rpc_net:
+  harmony_home_rpc_net:
     external: true
   binance_net:
     external: true

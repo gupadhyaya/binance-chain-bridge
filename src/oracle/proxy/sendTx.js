@@ -1,11 +1,16 @@
 const axios = require('axios')
-const ethers = require('ethers')
 const BN = require('bignumber.js')
 
 const logger = require('./logger')
 const { delay, retry } = require('./wait')
+const { Messenger, HttpProvider } = require('@harmony-js/network')
+const { ChainType } = require('@harmony-js/utils')
+const { TransactionFactory } = require('@harmony-js/transaction');
+const { Wallet } = require('@harmony-js/account');
 
 const { GAS_LIMIT_FACTOR, MAX_GAS_LIMIT } = process.env
+
+const factory = new TransactionFactory();
 
 async function sendRpcRequest(url, method, params) {
   logger.trace(`Request to ${url}, method ${method}, params %o`, params)
@@ -19,29 +24,32 @@ async function sendRpcRequest(url, method, params) {
   return response.data
 }
 
-async function createSender(url, privateKey) {
-  const provider = new ethers.providers.JsonRpcProvider(url)
-  const wallet = new ethers.Wallet(privateKey, provider)
-
-  const { chainId } = await provider.getNetwork()
+async function createSender(url, chainId, privateKey) {
+  const wallet = new Wallet(
+    new Messenger(
+      new HttpProvider(url),
+      ChainType.Harmony,
+      chainId
+    )
+  );
+  wallet.addByPrivateKey(privateKey);
   return async function send(tx) {
-    const newTx = {
+    const txParams = {
       data: tx.data,
       to: tx.to,
       nonce: tx.nonce,
-      chainId,
+      chainId: `0x${new BN(chainId || 0).toString(16)}`,
       value: `0x${new BN(tx.value || 0).toString(16)}`,
       gasPrice: `0x${new BN(tx.gasPrice || 1000000000).toString(16)}`
     }
-
     try {
-      logger.trace(`Preparing and sending transaction %o on ${url}`, newTx)
-      const estimate = await sendRpcRequest(url, 'eth_estimateGas', [{
+      logger.trace(`Preparing and sending transaction %o on ${url}`, txParams)
+      const estimate = await sendRpcRequest(url, 'hmy_estimateGas', [{
         from: wallet.address,
-        to: newTx.to,
-        data: newTx.data,
-        gasPrice: newTx.gasPrice,
-        value: newTx.value,
+        to: txParams.to,
+        data: txParams.data,
+        gasPrice: txParams.gasPrice,
+        value: txParams.value,
         gas: `0x${new BN(MAX_GAS_LIMIT).toString(16)}`
       }])
 
@@ -53,12 +61,12 @@ async function createSender(url, privateKey) {
         new BN(estimate.result, 16).multipliedBy(GAS_LIMIT_FACTOR),
         MAX_GAS_LIMIT
       )
-      newTx.gasLimit = `0x${new BN(gasLimit).toString(16)}`
+      txParams.gasLimit = `0x${new BN(gasLimit).toString(16)}`
       logger.trace(`Estimated gas to ${gasLimit}`)
 
-      const signedTx = await wallet.sign(newTx)
-
-      const { result, error } = await sendRpcRequest(url, 'eth_sendRawTransaction', [signedTx])
+      const tx = factory.newTx(txParams)
+      const signedTx = await wallet.signTransaction(tx)
+      const { result, error } = await sendRpcRequest(url, 'hmy_sendRawTransaction', [signedTx.rawTransaction])
       // handle nonce error
       // handle insufficient funds error
       if (error) {
@@ -68,7 +76,7 @@ async function createSender(url, privateKey) {
 
       return {
         txHash: result,
-        gasLimit: newTx.gasLimit
+        gasLimit: txParams.gasLimit
       }
     } catch (e) {
       logger.warn('Something failed, %o', e)
@@ -77,10 +85,11 @@ async function createSender(url, privateKey) {
   }
 }
 
-async function waitForReceipt(url, txHash) {
-  const provider = new ethers.providers.JsonRpcProvider(url)
+async function waitForReceipt(blockchain, txHash) {
   while (true) {
-    const receipt = await provider.getTransactionReceipt(txHash)
+    const receipt = (await blockchain.getTransactionByHash({
+      txnHash: txHash,
+    })).result;
 
     if (receipt) {
       return receipt

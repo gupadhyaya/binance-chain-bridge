@@ -3,6 +3,9 @@ const AsyncLock = require('async-lock')
 const axios = require('axios')
 const BN = require('bignumber.js')
 const ethers = require('ethers')
+const { Harmony } = require("@harmony-js/core");
+const { ChainType } = require("@harmony-js/utils");
+const { sign } = require('@harmony-js/crypto')
 
 const { tokenAbi, bridgeAbi, sharedDbAbi } = require('./contractsAbi')
 const {
@@ -15,9 +18,19 @@ const logger = require('./logger')
 const { publicKeyToAddress, padZeros } = require('./crypto')
 
 const {
-  HOME_RPC_URL, HOME_BRIDGE_ADDRESS, SIDE_RPC_URL, SIDE_SHARED_DB_ADDRESS, VALIDATOR_PRIVATE_KEY,
-  HOME_TOKEN_ADDRESS, FOREIGN_URL, FOREIGN_ASSET
-} = process.env
+  HOME_RPC_URL,
+  HOME_WS_URL,
+  CHAIN_ID,
+  GAS_LIMIT,
+  GAS_PRICE,
+  HOME_BRIDGE_ADDRESS,
+  SIDE_RPC_URL,
+  SIDE_SHARED_DB_ADDRESS,
+  VALIDATOR_PRIVATE_KEY,
+  HOME_TOKEN_ADDRESS,
+  FOREIGN_URL,
+  FOREIGN_ASSET,
+} = process.env;
 
 const Action = {
   CONFIRM_KEYGEN: 0,
@@ -34,16 +47,28 @@ const Action = {
   TRANSFER: 11
 }
 
-const homeProvider = new ethers.providers.JsonRpcProvider(HOME_RPC_URL)
-const sideProvider = new ethers.providers.JsonRpcProvider(SIDE_RPC_URL)
-const homeWallet = new ethers.Wallet(VALIDATOR_PRIVATE_KEY, homeProvider)
-const sideWallet = new ethers.Wallet(VALIDATOR_PRIVATE_KEY, sideProvider)
+const hmy = new Harmony(HOME_RPC_URL, {
+  chainType: ChainType.Harmony,
+  chainId: parseInt(CHAIN_ID),
+})
+const hmy_ws = new Harmony(HOME_WS_URL, {
+  chainType: ChainType.Harmony,
+  chainId: parseInt(CHAIN_ID),
+})
+hmy.wallet.addByPrivateKey(VALIDATOR_PRIVATE_KEY);
+let options = {
+  gasPrice: GAS_PRICE,
+  gasLimit: GAS_LIMIT,
+}
 
-const token = new ethers.Contract(HOME_TOKEN_ADDRESS, tokenAbi, homeWallet)
-const bridge = new ethers.Contract(HOME_BRIDGE_ADDRESS, bridgeAbi, homeWallet)
-const sharedDb = new ethers.Contract(SIDE_SHARED_DB_ADDRESS, sharedDbAbi, sideWallet)
+const bridgeContract = hmy.contracts.createContract(bridgeAbi, HOME_BRIDGE_ADDRESS);
+const tokenContract = hmy.contracts.createContract(tokenAbi, HOME_TOKEN_ADDRESS);
+const sharedDbContract = hmy.contracts.createContract(sharedDbAbi, SIDE_SHARED_DB_ADDRESS);
+const token = tokenContract.methods;
+const bridge = bridgeContract.methods;
+const sharedDb = sharedDbContract.methods;
 
-const validatorAddress = homeWallet.address
+const validatorAddress = bridgeContract.wallet.signer.address;
 
 const httpClient = axios.create({ baseURL: FOREIGN_URL })
 
@@ -76,8 +101,8 @@ function sideSendQuery(query) {
 async function status(req, res) {
   logger.debug('Status call')
   const [bridgeEpoch, bridgeStatus] = await Promise.all([
-    bridge.epoch(),
-    bridge.status()
+    bridge.epoch().call(options),
+    bridge.status().call(options)
   ])
   res.send({
     bridgeEpoch,
@@ -92,19 +117,19 @@ async function get(req, res) {
   const uuid = req.body.key.third
   let from
   if (uuid.startsWith('k')) {
-    from = (await bridge.getNextValidators())[parseInt(req.body.key.first, 10) - 1]
+    from = (await bridge.getNextValidators().call(options))[parseInt(req.body.key.first, 10) - 1]
   } else {
-    const validators = await bridge.getValidators()
+    const validators = await bridge.getValidators().call(options)
     from = await sharedDb.getSignupAddress(
       uuid,
       validators,
       parseInt(req.body.key.first, 10)
-    )
+    ).call(options)
   }
   const to = Number(req.body.key.fourth) // 0 if empty
   const key = ethers.utils.id(`${round}_${to}`)
 
-  const data = await sharedDb.getData(from, ethers.utils.id(uuid), key)
+  const data = await sharedDb.getData(from, ethers.utils.id(uuid), key).call(options)
 
   if (data.length > 2) {
     logger.trace(`Received encoded data: ${data}`)
@@ -132,7 +157,7 @@ async function set(req, res) {
   const encoded = encode(uuid[0] === 'k', round, req.body.value)
   logger.trace(`Encoded data: ${encoded.toString('hex')}`)
   logger.trace(`Received data: ${req.body.value.length} bytes, encoded data: ${encoded.length} bytes`)
-  const query = sharedDb.interface.functions.setData.encode([ethers.utils.id(uuid), key, encoded])
+  const query = sharedDb.setData(ethers.utils.id(uuid), key, encoded).encodeABI()
   await sideSendQuery(query)
 
   res.send(Ok(null))
@@ -141,15 +166,15 @@ async function set(req, res) {
 
 async function signupKeygen(req, res) {
   logger.debug('SignupKeygen call')
-  const epoch = await bridge.nextEpoch()
-  const partyId = await bridge.getNextPartyId(validatorAddress)
+  const epoch = await bridge.nextEpoch().call(options)
+  const partyId = await bridge.getNextPartyId(validatorAddress).call(options)
 
   logger.debug('Checking previous attempts')
   let attempt = 1
   let uuid
   while (true) {
     uuid = `k${epoch}_${attempt}`
-    const data = await sharedDb.getData(validatorAddress, ethers.utils.id(uuid), ethers.utils.id('round1_0'))
+    const data = await sharedDb.getData(validatorAddress, ethers.utils.id(uuid), ethers.utils.id('round1_0')).call(options)
     if (data.length === 2) {
       break
     }
@@ -181,7 +206,7 @@ async function signupSign(req, res) {
   while (true) {
     uuid = `${msgHash}_${attempt}`
     hash = ethers.utils.id(uuid)
-    const data = await sharedDb.isSignuped(hash)
+    const data = await sharedDb.isSignuped(hash).call(options)
     if (!data) {
       break
     }
@@ -190,9 +215,9 @@ async function signupSign(req, res) {
   }
   logger.debug(`Using attempt ${attempt}`)
 
-  const query = sharedDb.interface.functions.signup.encode([hash])
+  const query = sharedDb.signup(hash).encodeABI()
   const { txHash } = await sideSendQuery(query)
-  const receipt = await waitForReceipt(SIDE_RPC_URL, txHash)
+  const receipt = await waitForReceipt(hmy.blockchain, txHash)
 
   // Already have signup
   if (receipt.status === false) {
@@ -204,8 +229,8 @@ async function signupSign(req, res) {
     return
   }
 
-  const validators = await bridge.getValidators()
-  const id = await sharedDb.getSignupNumber(hash, validators, validatorAddress)
+  const validators = await bridge.getValidators().call(options)
+  const id = await sharedDb.getSignupNumber(hash, validators, validatorAddress).call(options)
 
   res.send(Ok({
     uuid: hash,
@@ -239,9 +264,10 @@ function buildMessage(type, ...params) {
 }
 
 async function processMessage(message) {
-  const signature = await sideWallet.signMessage(message)
+  const signature = sign(message, VALIDATOR_PRIVATE_KEY)
+  // const signature = await sideWallet.signMessage(message)
   logger.debug('Adding signature to shared db contract')
-  const query = sharedDb.interface.functions.addSignature.encode([`0x${message.toString('hex')}`, signature])
+  const query = sharedDb.addSignature(`0x${message.toString('hex')}`, signature).encodeABI()
   await sideSendQuery(query)
 }
 
@@ -274,7 +300,7 @@ async function confirmCloseEpoch(req, res) {
 
 async function voteStartVoting(req, res) {
   logger.info('Voting for starting new epoch voting process')
-  const epoch = await bridge.epoch()
+  const epoch = await bridge.epoch().call(options)
   const message = buildMessage(Action.VOTE_START_VOTING, epoch)
   await processMessage(message)
   res.send('Voted\n')
@@ -283,7 +309,7 @@ async function voteStartVoting(req, res) {
 
 async function voteStartKeygen(req, res) {
   logger.info('Voting for starting new epoch keygen')
-  const epoch = await bridge.epoch()
+  const epoch = await bridge.epoch().call(options)
   const message = buildMessage(Action.VOTE_START_KEYGEN, epoch)
   await processMessage(message)
   res.send('Voted\n')
@@ -292,7 +318,7 @@ async function voteStartKeygen(req, res) {
 
 async function voteCancelKeygen(req, res) {
   logger.info('Voting for cancelling new epoch keygen')
-  const epoch = await bridge.nextEpoch()
+  const epoch = await bridge.nextEpoch().call(options)
   const message = buildMessage(Action.VOTE_CANCEL_KEYGEN, epoch)
   await processMessage(message)
   res.send('Voted\n')
@@ -302,7 +328,7 @@ async function voteCancelKeygen(req, res) {
 async function voteAddValidator(req, res) {
   if (ethers.utils.isHexString(req.params.validator, 20)) {
     logger.info('Voting for adding new validator')
-    const epoch = await bridge.epoch()
+    const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_ADD_VALIDATOR,
       epoch,
@@ -318,7 +344,7 @@ async function voteAddValidator(req, res) {
 async function voteChangeThreshold(req, res) {
   if (/^[0-9]+$/.test(req.params.threshold)) {
     logger.info('Voting for changing threshold')
-    const epoch = await bridge.epoch()
+    const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_CHANGE_THRESHOLD,
       epoch,
@@ -334,7 +360,7 @@ async function voteChangeThreshold(req, res) {
 async function voteChangeRangeSize(req, res) {
   if (/^[0-9]+$/.test(req.params.rangeSize)) {
     logger.info('Voting for changing range size')
-    const epoch = await bridge.epoch()
+    const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_CHANGE_RANGE_SIZE,
       epoch,
@@ -350,7 +376,7 @@ async function voteChangeRangeSize(req, res) {
 async function voteChangeCloseEpoch(req, res) {
   if (req.params.closeEpoch === 'true' || req.params.closeEpoch === 'false') {
     logger.info('Voting for changing close epoch')
-    const epoch = await bridge.epoch()
+    const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_CHANGE_CLOSE_EPOCH,
       epoch,
@@ -366,7 +392,7 @@ async function voteChangeCloseEpoch(req, res) {
 async function voteRemoveValidator(req, res) {
   if (ethers.utils.isHexString(req.params.validator, 20)) {
     logger.info('Voting for removing validator')
-    const epoch = await bridge.epoch()
+    const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_REMOVE_VALIDATOR,
       epoch,
@@ -413,23 +439,23 @@ async function info(req, res) {
       foreignNonce, nextEpoch, threshold, nextThreshold, validators, nextValidators, bridgeStatus,
       homeBalance
     ] = await Promise.all([
-      bridge.getX().then((value) => new BN(value).toString(16)),
-      bridge.getY().then((value) => new BN(value).toString(16)),
-      bridge.epoch(),
-      bridge.getRangeSize(),
-      bridge.getNextRangeSize(),
-      bridge.getCloseEpoch(),
-      bridge.getNextCloseEpoch(),
-      bridge.getStartBlock(),
-      bridge.getNonce(),
-      bridge.nextEpoch(),
-      bridge.getThreshold(),
-      bridge.getNextThreshold(),
-      bridge.getValidators(),
-      bridge.getNextValidators(),
-      bridge.status(),
-      token.balanceOf(HOME_BRIDGE_ADDRESS)
-        .then((value) => parseFloat(new BN(value).dividedBy(10 ** 18).toFixed(8, 3)))
+      bridge.getX().call(options).then((value) => new BN(value).toString(16)),
+      bridge.getY().call(options).then((value) => new BN(value).toString(16)),
+      bridge.epoch().call(options),
+      bridge.getRangeSize().call(options),
+      bridge.getNextRangeSize().call(options),
+      bridge.getCloseEpoch().call(options),
+      bridge.getNextCloseEpoch().call(options),
+      bridge.getStartBlock().call(options),
+      bridge.getNonce().call(options),
+      bridge.nextEpoch().call(options),
+      bridge.getThreshold().call(options),
+      bridge.getNextThreshold().call(options),
+      bridge.getValidators().call(options),
+      bridge.getNextValidators().call(options),
+      bridge.status().call(options),
+      token.balanceOf(HOME_BRIDGE_ADDRESS).call(options)
+        .then((value) => parseFloat(new BN(value).toFixed(8, 3)))
     ])
     const foreignAddress = publicKeyToAddress({
       x,
@@ -504,9 +530,11 @@ votesProxyApp.get('/vote/changeCloseEpoch/:closeEpoch', voteChangeCloseEpoch)
 votesProxyApp.get('/info', info)
 
 async function main() {
-  sideValidatorNonce = await sideWallet.getTransactionCount()
+  sideValidatorNonce = await hmy.blockchain.getTransactionCount({
+    address: validatorAddress
+  })
 
-  sideSender = await createSender(SIDE_RPC_URL, VALIDATOR_PRIVATE_KEY)
+  sideSender = await createSender(SIDE_RPC_URL, CHAIN_ID, VALIDATOR_PRIVATE_KEY)
 
   logger.warn(`My validator address in home and side networks is ${validatorAddress}`)
 
@@ -520,3 +548,137 @@ async function main() {
 }
 
 main()
+
+// (async function() {
+  // console.log(HOME_RPC_URL,
+  //   CHAIN_ID,
+  //   HOME_BRIDGE_ADDRESS,
+  //   SIDE_RPC_URL,
+  //   SIDE_SHARED_DB_ADDRESS,
+  //   VALIDATOR_PRIVATE_KEY,
+  //   HOME_TOKEN_ADDRESS,
+  //   FOREIGN_URL,
+  //   FOREIGN_ASSET);
+  // let sender = await createSender(SIDE_RPC_URL, CHAIN_ID, '1f054c21a0f57ebc402c00e14bd1707ddf45542d4ed9989933dbefc4ea96ca68')
+  // const abi = [
+  //   {
+  //     "anonymous": false,
+  //     "inputs": [
+  //       {
+  //         "indexed": false,
+  //         "internalType": "address",
+  //         "name": "inc",
+  //         "type": "address"
+  //       },
+  //       {
+  //         "indexed": false,
+  //         "internalType": "int256",
+  //         "name": "counter",
+  //         "type": "int256"
+  //       }
+  //     ],
+  //     "name": "DecrementedBy",
+  //     "type": "event"
+  //   },
+  //   {
+  //     "anonymous": false,
+  //     "inputs": [
+  //       {
+  //         "indexed": false,
+  //         "internalType": "address",
+  //         "name": "inc",
+  //         "type": "address"
+  //       }
+  //     ],
+  //     "name": "IncrementedBy",
+  //     "type": "event"
+  //   },
+  //   {
+  //     "constant": true,
+  //     "inputs": [],
+  //     "name": "decimals",
+  //     "outputs": [
+  //       {
+  //         "internalType": "uint8",
+  //         "name": "",
+  //         "type": "uint8"
+  //       }
+  //     ],
+  //     "payable": false,
+  //     "stateMutability": "view",
+  //     "type": "function"
+  //   },
+  //   {
+  //     "constant": false,
+  //     "inputs": [],
+  //     "name": "incrementCounter",
+  //     "outputs": [],
+  //     "payable": false,
+  //     "stateMutability": "nonpayable",
+  //     "type": "function"
+  //   },
+  //   {
+  //     "constant": false,
+  //     "inputs": [],
+  //     "name": "decrementCounter",
+  //     "outputs": [],
+  //     "payable": false,
+  //     "stateMutability": "nonpayable",
+  //     "type": "function"
+  //   },
+  //   {
+  //     "constant": true,
+  //     "inputs": [],
+  //     "name": "getCount",
+  //     "outputs": [
+  //       {
+  //         "internalType": "int256",
+  //         "name": "",
+  //         "type": "int256"
+  //       }
+  //     ],
+  //     "payable": false,
+  //     "stateMutability": "view",
+  //     "type": "function"
+  //   }
+  // ]
+  // const addr = '0x7C72f67D7a062f3ddce0224C47b9b3f35A80135f'
+  // const counterContract = hmy.contracts.createContract(abi, addr);
+  // const query = counterContract.methods.incrementCounter().encodeABI()
+  // console.log(query);
+  // const senderResponse = await sender({
+  //   data: query,
+  //   to: addr
+  // })
+  // console.log(senderResponse);
+  // console.log(await bridge.epoch().call(options));
+  // console.log(await waitForReceipt(hmy.blockchain, '0xd5f05b34727c0383020b454522d896016b67af9f2dec01c9397423ad22c5659f'));
+  // const [
+  //   x, y, epoch, rangeSize, nextRangeSize, closeEpoch, nextCloseEpoch, epochStartBlock,
+  //   foreignNonce, nextEpoch, threshold, nextThreshold, validators, nextValidators, bridgeStatus,
+  //   homeBalance
+  // ] = await Promise.all([
+  //   bridge.getX().call(options).then((value) => new BN(value).toString(16)),
+  //   bridge.getY().call(options).then((value) => new BN(value).toString(16)),
+  //   bridge.epoch().call(options),
+  //   bridge.getRangeSize().call(options),
+  //   bridge.getNextRangeSize().call(options),
+  //   bridge.getCloseEpoch().call(options),
+  //   bridge.getNextCloseEpoch().call(options),
+  //   bridge.getStartBlock().call(options),
+  //   bridge.getNonce().call(options),
+  //   bridge.nextEpoch().call(options),
+  //   bridge.getThreshold().call(options),
+  //   bridge.getNextThreshold().call(options),
+  //   bridge.getValidators().call(options),
+  //   bridge.getNextValidators().call(options),
+  //   bridge.status().call(options),
+  //   token.balanceOf(HOME_BRIDGE_ADDRESS).call(options)
+  //     .then((value) => parseFloat(new BN(value).toFixed(8, 3)))
+  // ])
+  // console.log(HOME_BRIDGE_ADDRESS, HOME_TOKEN_ADDRESS,
+  //   x, y, epoch, rangeSize, nextRangeSize, closeEpoch, nextCloseEpoch, epochStartBlock,
+  //   foreignNonce, nextEpoch, threshold, nextThreshold, validators, nextValidators, bridgeStatus,
+  //   homeBalance
+  // )
+// })();
