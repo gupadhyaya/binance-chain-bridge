@@ -118,8 +118,8 @@ if [[ "$TARGET_NETWORK" == "development" ]]; then
     echo "Creating new ethereum test network"
 
     echo "Removing old environment"
-    docker kill $(docker ps -a | grep ethereum-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
-    docker rm $(docker ps -a | grep ethereum-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
+    docker kill $(docker ps -a | grep harmony-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
+    docker rm $(docker ps -a | grep harmony-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
     docker volume rm ganache_side_data > /dev/null 2>&1 || true
     docker volume rm ganache_home_data > /dev/null 2>&1 || true
 
@@ -133,7 +133,7 @@ if [[ "$TARGET_NETWORK" == "development" ]]; then
 
   echo "Starting ethereum test environment"
 
-  BLOCK_TIME="$BLOCK_TIME" docker-compose -f ./src/ethereum-testnet/docker-compose.yml up --build -d
+  BLOCK_TIME="$BLOCK_TIME" docker-compose -f ./src/harmony-testnet/docker-compose.yml up --build -d
 
   sleep 4
 

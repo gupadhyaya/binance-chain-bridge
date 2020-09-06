@@ -7,6 +7,8 @@ RUN apk update && \
 
 COPY ./package.json /side-oracle/
 
+RUN apk add git python build-base
+
 RUN npm install
 
 COPY ./index.js ./

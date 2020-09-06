@@ -349,6 +349,12 @@ async function sendKeygen(event) {
     threshold,
     parties
   })
+  // console.log({
+  //   epoch: newEpoch,
+  //   blockNumber,
+  //   threshold,
+  //   parties
+  // });
   logger.debug('Sent keygen start event')
 }
 
@@ -448,7 +454,11 @@ async function processEpochStart(event) {
   epochStart = blockNumber
   logger.info(`Epoch ${epoch} started`)
   rangeSize = await bridge.getRangeSize(epoch).call(options)
-  isCurrentValidator = (await bridge.getValidators(epoch).call(options)).includes(validatorAddress)
+  isCurrentValidator = (await bridge.getValidators(epoch).call(options))
+    .map((a) => {
+      return a.toLowerCase();
+    })
+    .includes(validatorAddress);
   if (isCurrentValidator) {
     logger.info(`${validatorAddress} is a current validator`)
   } else {
@@ -485,19 +495,27 @@ async function initialize() {
 
   activeEpoch = !!(await redis.get('activeEpoch'))
 
-  chainId = (await provider.getNetwork()).chainId
+  chainId = numberToHex(CHAIN_ID)
 
-  const events = (await hmy.messenger.send("hmy_getLogs", [{
+  let events = (await hmy.messenger.send("hmy_getLogs", [{
     address: HOME_BRIDGE_ADDRESS,
-    fromBlock: 1,
+    fromBlock: numberToHex(HOME_START_BLOCK),
     toBlock: 'latest',
     topics: bridgeContractWS.events.EpochStart().options.topics//bridge.filters.EpochStart().topics
-  }])).result.map((log) => parseLog(log))
+  }])).result
+  
+  if (events === undefined) {
+    events = []
+  } 
+  
+  events = events.map((log) => parseLog(log))
+
+  console.log(events);
 
   epoch = events.length ? events[events.length - 1].values.epoch : 0
   logger.info(`Current epoch ${epoch}`)
   epochStart = events.length ? events[events.length - 1].blockNumber : 1
-  const saved = (parseInt(await redis.get('homeBlock'), 10) + 1) || parseInt(HOME_START_BLOCK, 10)
+  const saved = (epoch ==0)?parseInt(HOME_START_BLOCK, 10):(parseInt(await redis.get('homeBlock'), 10) + 1) //parseInt(HOME_START_BLOCK, 10)//
   if (epochStart > saved) {
     logger.info(`Data in db is outdated, starting from epoch ${epoch}, block #${epochStart}`)
     blockNumber = epochStart
@@ -514,7 +532,12 @@ async function initialize() {
   rangeSize = await bridge.getRangeSize(epoch).call(options)
   logger.debug(`Range size ${rangeSize}`)
   logger.debug('Checking if current validator')
-  isCurrentValidator = (await bridge.getValidators(epoch).call(options)).includes(validatorAddress)
+  
+  isCurrentValidator = (await bridge.getValidators(epoch).call(options))
+    .map((a) => {
+      return a.toLowerCase();
+    })
+    .includes(validatorAddress);
   if (isCurrentValidator) {
     logger.info(`${validatorAddress} is a current validator`)
   } else {
@@ -526,7 +549,7 @@ async function initialize() {
   await resetFutureMessages(exchangeQueue)
   await resetFutureMessages(signQueue)
   await resetFutureMessages(epochTimeIntervalsQueue)
-  logger.debug('Sending start commands')
+  logger.info('Sending start commands')
   await axios.get('http://keygen:8001/start')
   await axios.get('http://signer:8001/start')
 }
@@ -536,9 +559,9 @@ function parseLog(ev) {
   if (!fragment || fragment.anonymous) {
     return null;
   }
-  let log = contract.abiCoder.decodeLog(
+  let log = bridgeContract.abiCoder.decodeLog(
     fragment.inputs,
-    ev.data,
+    ev.data == "0x" ? "" : ev.data,
     ev.topics.slice(1)
   );
   return {
@@ -554,36 +577,52 @@ async function loop() {
     await delay(2000)
     return
   }
-
+  
   const endBlock = Math.min(latestBlockNumber, blockNumber + HOME_MAX_FETCH_RANGE_SIZE - 1)
 
   redisTx = redis.multi()
 
   logger.debug(`Watching events in blocks #${blockNumber}-${endBlock}`)
 
-  const bridgeEvents = (await hmy.messenger.send("hmy_getLogs", [{
+  let bridgeEvents = (await hmy.messenger.send("hmy_getLogs", [{
     address: HOME_BRIDGE_ADDRESS,
-    fromBlock: blockNumber,
-    toBlock: endBlock,
+    fromBlock: numberToHex(blockNumber),
+    toBlock: numberToHex(endBlock),
     topics: []
   }])).result
+
+  if (bridgeEvents == undefined) {
+    bridgeEvents = [];
+  }
 
   for (let curBlockNumber = blockNumber, i = 0; curBlockNumber <= endBlock; curBlockNumber += 1) {
     const rangeOffset = (curBlockNumber + 1 - epochStart) % rangeSize
     const rangeStart = curBlockNumber - (rangeOffset || rangeSize)
-    let epochTimeUpdated = false
-    while (i < bridgeEvents.length && bridgeEvents[i].blockNumber === curBlockNumber) {
+    let epochTimeUpdated = false    
+    while (i < bridgeEvents.length && hexToNumber(bridgeEvents[i].blockNumber) == curBlockNumber) {
       const event = parseLog(bridgeEvents[i])
       logger.trace('Consumed event %o %o', event, bridgeEvents[i])
       switch (event.name) {
         case 'NewEpoch':
-          if ((await bridge.getValidators(event.values.newEpoch).call(options)).includes(validatorAddress)) {
-            await sendKeygen(event)
+          if (
+            (await bridge.getValidators(event.values.newEpoch).call(options))
+              .map((a) => {
+                return a.toLowerCase();
+              })
+              .includes(validatorAddress)
+          ) {
+            await sendKeygen(event);
           }
           break
         case 'NewEpochCancelled':
-          if ((await bridge.getValidators(event.values.epoch).call(options)).includes(validatorAddress)) {
-            sendKeygenCancellation(event)
+          if (
+            (await bridge.getValidators(event.values.epoch).call(options))
+              .map((a) => {
+                return a.toLowerCase();
+              })
+              .includes(validatorAddress)
+          ) {
+            sendKeygenCancellation(event);
           }
           break
         case 'NewFundsTransfer':
@@ -747,4 +786,11 @@ main()
 //   // })
 //   // console.log(publicKey);
 
+// let bridgeEvents = (await hmy.messenger.send("hmy_getLogs", [{
+//   address: HOME_BRIDGE_ADDRESS,
+//   fromBlock: '0x13d5f8',
+//   toBlock: '0x0x13D62A',
+//   topics: []
+// }])).result
+// console.log(bridgeEvents)
 // })();

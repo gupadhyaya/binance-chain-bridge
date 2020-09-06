@@ -15,8 +15,8 @@ docker kill ganache_home ganache_side > /dev/null 2>&1 || true
 docker rm ganache_home ganache_side > /dev/null 2>&1 || true
 docker kill $(docker ps | grep binance-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
 docker rm $(docker ps -a | grep binance-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
-docker kill $(docker ps | grep ethereum-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
-docker rm $(docker ps -a | grep ethereum-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
+docker kill $(docker ps | grep harmony-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
+docker rm $(docker ps -a | grep harmony-testnet_ | awk '{print $1}') > /dev/null 2>&1 || true
 
 if [[ "$TARGET_NETWORK" == "development" ]]; then
   docker volume rm ganache_side_data > /dev/null 2>&1 || true

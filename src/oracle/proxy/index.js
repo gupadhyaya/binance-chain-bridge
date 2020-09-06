@@ -5,7 +5,7 @@ const BN = require('bignumber.js')
 const ethers = require('ethers')
 const { Harmony } = require("@harmony-js/core");
 const { ChainType } = require("@harmony-js/utils");
-const { sign } = require('@harmony-js/crypto')
+const { sign, joinSignature } = require('@harmony-js/crypto')
 
 const { tokenAbi, bridgeAbi, sharedDbAbi } = require('./contractsAbi')
 const {
@@ -70,6 +70,9 @@ const sharedDb = sharedDbContract.methods;
 
 const validatorAddress = bridgeContract.wallet.signer.address;
 
+// const sideProvider = new ethers.providers.JsonRpcProvider(HOME_RPC_URL)
+// const sideWallet = new ethers.Wallet(VALIDATOR_PRIVATE_KEY, sideProvider)
+
 const httpClient = axios.create({ baseURL: FOREIGN_URL })
 
 const lock = new AsyncLock()
@@ -119,7 +122,7 @@ async function get(req, res) {
   if (uuid.startsWith('k')) {
     from = (await bridge.getNextValidators().call(options))[parseInt(req.body.key.first, 10) - 1]
   } else {
-    const validators = await bridge.getValidators().call(options)
+    const validators = (await bridge.getValidators().call(options)).map((a) => { return a.toLowerCase() })
     from = await sharedDb.getSignupAddress(
       uuid,
       validators,
@@ -129,8 +132,11 @@ async function get(req, res) {
   const to = Number(req.body.key.fourth) // 0 if empty
   const key = ethers.utils.id(`${round}_${to}`)
 
+  // console.log(`from: ${from}`)
+
   const data = await sharedDb.getData(from, ethers.utils.id(uuid), key).call(options)
 
+  // console.log(data);
   if (data.length > 2) {
     logger.trace(`Received encoded data: ${data}`)
     const decoded = decode(uuid[0] === 'k', round, data)
@@ -140,14 +146,14 @@ async function get(req, res) {
       value: decoded
     }))
   } else {
-    setTimeout(() => res.send(Err(null)), 1000)
+    setTimeout(() => res.send(Err(null)), 5000)
   }
 
   logger.debug('Get end')
 }
 
 async function set(req, res) {
-  logger.debug('Set call')
+  logger.debug('Set call', req.body.key)
   const round = req.body.key.second
   const uuid = req.body.key.third
   const to = Number(req.body.key.fourth)
@@ -167,9 +173,9 @@ async function set(req, res) {
 async function signupKeygen(req, res) {
   logger.debug('SignupKeygen call')
   const epoch = await bridge.nextEpoch().call(options)
-  const partyId = await bridge.getNextPartyId(validatorAddress).call(options)
+  const partyId = parseInt(await bridge.getNextPartyId(validatorAddress).call(options), 10)
 
-  logger.debug('Checking previous attempts')
+  logger.debug(`Checking previous attempts, partyId: ${partyId}`)
   let attempt = 1
   let uuid
   while (true) {
@@ -178,7 +184,7 @@ async function signupKeygen(req, res) {
     if (data.length === 2) {
       break
     }
-    logger.trace(`Attempt ${attempt} is already used`)
+    logger.trace(`Attempt ${attempt} is already used, partyId: ${partyId}`)
     attempt += 1
   }
   logger.debug(`Using attempt ${attempt}`)
@@ -187,6 +193,7 @@ async function signupKeygen(req, res) {
     res.send(Err({ message: 'Not a validator' }))
     logger.debug('Not a validator')
   } else {
+    // console.log(uuid, partyId);
     res.send(Ok({
       uuid,
       number: partyId
@@ -229,7 +236,7 @@ async function signupSign(req, res) {
     return
   }
 
-  const validators = await bridge.getValidators().call(options)
+  const validators = (await bridge.getValidators().call(options)).map((a) => { return a.toLowerCase() })
   const id = await sharedDb.getSignupNumber(hash, validators, validatorAddress).call(options)
 
   res.send(Ok({
@@ -264,17 +271,20 @@ function buildMessage(type, ...params) {
 }
 
 async function processMessage(message) {
-  const signature = sign(message, VALIDATOR_PRIVATE_KEY)
+  const signature = joinSignature(sign(ethers.utils.hashMessage(message), VALIDATOR_PRIVATE_KEY))
+  // const signature = await sideWallet.signMessage(message)
   // const signature = await sideWallet.signMessage(message)
   logger.debug('Adding signature to shared db contract')
+  console.log(`0x${message.toString('hex')}`, signature);
   const query = sharedDb.addSignature(`0x${message.toString('hex')}`, signature).encodeABI()
+  // console.log(res.transaction.receipt)
   await sideSendQuery(query)
 }
 
 async function confirmKeygen(req, res) {
   logger.debug('Confirm keygen call')
   const { x, y, epoch } = req.body
-  const message = buildMessage(Action.CONFIRM_KEYGEN, epoch, padZeros(x, 64), padZeros(y, 64))
+  const message = buildMessage(Action.CONFIRM_KEYGEN, parseInt(epoch), padZeros(x, 64), padZeros(y, 64))
   await processMessage(message)
   res.send()
   logger.debug('Confirm keygen end')
@@ -283,7 +293,7 @@ async function confirmKeygen(req, res) {
 async function confirmFundsTransfer(req, res) {
   logger.debug('Confirm funds transfer call')
   const { epoch } = req.body
-  const message = buildMessage(Action.CONFIRM_FUNDS_TRANSFER, epoch)
+  const message = buildMessage(Action.CONFIRM_FUNDS_TRANSFER, parseInt(epoch))
   await processMessage(message)
   res.send()
   logger.debug('Confirm funds transfer end')
@@ -292,7 +302,7 @@ async function confirmFundsTransfer(req, res) {
 async function confirmCloseEpoch(req, res) {
   logger.debug('Confirm close epoch call')
   const { epoch } = req.body
-  const message = buildMessage(Action.CONFIRM_CLOSE_EPOCH, epoch)
+  const message = buildMessage(Action.CONFIRM_CLOSE_EPOCH, parseInt(epoch))
   await processMessage(message)
   res.send()
   logger.debug('Confirm close epoch end')
@@ -301,7 +311,7 @@ async function confirmCloseEpoch(req, res) {
 async function voteStartVoting(req, res) {
   logger.info('Voting for starting new epoch voting process')
   const epoch = await bridge.epoch().call(options)
-  const message = buildMessage(Action.VOTE_START_VOTING, epoch)
+  const message = buildMessage(Action.VOTE_START_VOTING, parseInt(epoch))
   await processMessage(message)
   res.send('Voted\n')
   logger.info('Voted successfully')
@@ -310,7 +320,7 @@ async function voteStartVoting(req, res) {
 async function voteStartKeygen(req, res) {
   logger.info('Voting for starting new epoch keygen')
   const epoch = await bridge.epoch().call(options)
-  const message = buildMessage(Action.VOTE_START_KEYGEN, epoch)
+  const message = buildMessage(Action.VOTE_START_KEYGEN, parseInt(epoch))
   await processMessage(message)
   res.send('Voted\n')
   logger.info('Voted successfully')
@@ -319,7 +329,7 @@ async function voteStartKeygen(req, res) {
 async function voteCancelKeygen(req, res) {
   logger.info('Voting for cancelling new epoch keygen')
   const epoch = await bridge.nextEpoch().call(options)
-  const message = buildMessage(Action.VOTE_CANCEL_KEYGEN, epoch)
+  const message = buildMessage(Action.VOTE_CANCEL_KEYGEN, parseInt(epoch))
   await processMessage(message)
   res.send('Voted\n')
   logger.info('Voted successfully')
@@ -331,7 +341,7 @@ async function voteAddValidator(req, res) {
     const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_ADD_VALIDATOR,
-      epoch,
+      parseInt(epoch),
       req.params.validator,
       padZeros(req.attempt, 18)
     )
@@ -347,7 +357,7 @@ async function voteChangeThreshold(req, res) {
     const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_CHANGE_THRESHOLD,
-      epoch,
+      parseInt(epoch),
       parseInt(req.params.threshold, 10),
       padZeros(req.attempt, 54)
     )
@@ -363,7 +373,7 @@ async function voteChangeRangeSize(req, res) {
     const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_CHANGE_RANGE_SIZE,
-      epoch,
+      parseInt(epoch),
       parseInt(req.params.rangeSize, 10),
       padZeros(req.attempt, 54)
     )
@@ -379,7 +389,7 @@ async function voteChangeCloseEpoch(req, res) {
     const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_CHANGE_CLOSE_EPOCH,
-      epoch,
+      parseInt(epoch),
       req.params.closeEpoch === 'true',
       padZeros(req.attempt, 56)
     )
@@ -395,7 +405,7 @@ async function voteRemoveValidator(req, res) {
     const epoch = await bridge.epoch().call(options)
     const message = buildMessage(
       Action.VOTE_REMOVE_VALIDATOR,
-      epoch,
+      parseInt(epoch),
       req.params.validator,
       padZeros(req.attempt, 18)
     )
@@ -412,7 +422,7 @@ async function transfer(req, res) {
   } = req.body
   if (ethers.utils.isHexString(to, 20)) {
     logger.info(`Calling transfer to ${to}, 0x${value} tokens`)
-    const message = buildMessage(Action.TRANSFER, epoch, hash, to, padZeros(value, 24))
+    const message = buildMessage(Action.TRANSFER, parseInt(epoch), hash, to, padZeros(value, 24))
     logger.info(`Message for sign: ${message.toString('hex')}`)
     await processMessage(message)
   }
@@ -457,6 +467,8 @@ async function info(req, res) {
       token.balanceOf(HOME_BRIDGE_ADDRESS).call(options)
         .then((value) => parseFloat(new BN(value).toFixed(8, 3)))
     ])
+    validators.map((a) => { return a.toLowerCase() })
+    nextValidators.map((a) => { return a.toLowerCase() })
     const foreignAddress = publicKeyToAddress({
       x,
       y
@@ -530,11 +542,11 @@ votesProxyApp.get('/vote/changeCloseEpoch/:closeEpoch', voteChangeCloseEpoch)
 votesProxyApp.get('/info', info)
 
 async function main() {
-  sideValidatorNonce = await hmy.blockchain.getTransactionCount({
+  sideValidatorNonce = parseInt((await hmy.blockchain.getTransactionCount({
     address: validatorAddress
-  })
+  })).result)
 
-  sideSender = await createSender(SIDE_RPC_URL, CHAIN_ID, VALIDATOR_PRIVATE_KEY)
+  sideSender = await createSender(hmy.blockchain, SIDE_RPC_URL, CHAIN_ID, VALIDATOR_PRIVATE_KEY)
 
   logger.warn(`My validator address in home and side networks is ${validatorAddress}`)
 

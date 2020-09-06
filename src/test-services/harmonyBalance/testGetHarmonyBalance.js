@@ -1,5 +1,5 @@
 const { Harmony } = require("@harmony-js/core");
-const { ChainType } = require("@harmony-js/utils");
+const { ChainType, hexToNumber } = require("@harmony-js/utils");
 
 const {
   HOME_RPC_URL,
@@ -45,6 +45,9 @@ let token = hmy.contracts.createContract(tokenAbi, HOME_TOKEN_ADDRESS);
 
 async function main() {
   const address = process.argv[2];
+
+  const hmyBalance = hexToNumber((await hmy.blockchain.getBalance({address})).result)
+  console.log(`${hmyBalance} wei`)
 
   try {
     const balance = await token.methods.balanceOf(address).call(options);

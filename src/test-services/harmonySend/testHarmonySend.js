@@ -9,11 +9,13 @@ const {
   CHAIN_ID,
 } = process.env;
 
+const PRIVATE_KEY = process.env.PRIVATE_KEY || HOME_PRIVATE_KEY
+
 const hmy = new Harmony(HOME_RPC_URL, {
   chainType: ChainType.Harmony,
   chainId: parseInt(CHAIN_ID),
 });
-hmy.wallet.addByPrivateKey(HOME_PRIVATE_KEY);
+hmy.wallet.addByPrivateKey(PRIVATE_KEY);
 let options = {
   gasPrice: process.env.GAS_PRICE,
   gasLimit: process.env.GAS_LIMIT,
